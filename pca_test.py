@@ -17,15 +17,13 @@ for f in [220, 440, 220, 440, 220, 440, 220, 440]:
     samples.extend(samples1)
 print(len(samples))
 
+samples = np.array(samples)
 window_len_samples = 128
-windows = np.zeros(window_len_samples)
-start = 0
-end = window_len_samples
-stride = window_len_samples
-while end < len(samples):
-    windows = np.vstack([windows, [samples[start:end]]])
-    start += stride
-    end += stride
+# stride argument: stride for each dimension of the resulting array
+# this is set up for stride=1 right now
+windows = np.lib.stride_tricks.as_strided(samples,
+        shape=(len(samples)-window_len_samples+1,window_len_samples),
+        strides=(samples.itemsize, samples.itemsize))
 
 print(len(windows))
 pca = PCA(n_components=2)
