@@ -5,7 +5,7 @@ import matplotlib
 matplotlib.use('Qt4Agg')
 import matplotlib.pyplot as plt
 import struct
-from sklearn.decomposition import  PCA, IncrementalPCA
+from sklearn.decomposition import PCA, IncrementalPCA
 from matplotlib.animation import FuncAnimation
 import pyaudio
 import math
@@ -19,10 +19,10 @@ samples = np.array(samples)
 window_len_samples = 128
 # stride argument: stride for each dimension of the resulting array
 # this is set up for stride=1 right now
-windows = np.lib.stride_tricks.as_strided(samples,
-        shape=(len(samples)-window_len_samples+1,window_len_samples),
-        strides=(samples.itemsize, samples.itemsize))
-
+windows = np.lib.stride_tricks.as_strided(
+    samples,
+    shape=(len(samples) - window_len_samples + 1, window_len_samples),
+    strides=(samples.itemsize, samples.itemsize))
 """
 if True:
     pca = IncrementalPCA(n_components=2)
@@ -41,11 +41,8 @@ with open('pca', 'wb') as f:
     pickle.dump(pca, f)
 """
 
-
 with open('pca', 'rb') as f:
     pca = pickle.load(f)
-
-
 
 fig = plt.figure()
 plt.xlim([-150000, 150000])
@@ -57,19 +54,24 @@ scat = plt.scatter([0], [0], s=10)
 p = pyaudio.PyAudio()
 cur = 0
 pyaudio_t = 0
+
+
 def callback(in_data, frame_count, time_info, status):
     global cur
     global pyaudio_t
-    d = samples[cur:cur+frame_count]
+    d = samples[cur:cur + frame_count]
     samples_packed = \
         struct.pack('%dh' % len(d), *d)
     cur += frame_count
     pyaudio_t = cur / rate
     return (samples_packed, pyaudio.paContinue)
-    
+
+
 fps = 20
 interval = 1000 / fps
 last = None
+
+
 def update(frame_n):
     global rate
     global cur
@@ -98,7 +100,12 @@ def update(frame_n):
     scat.set_offsets(transformed_windows)
     return []
 
-stream = p.open(rate=rate, channels=1, format=p.get_format_from_width(2), output=True,
-                stream_callback=callback)
+
+stream = p.open(
+    rate=rate,
+    channels=1,
+    format=p.get_format_from_width(2),
+    output=True,
+    stream_callback=callback)
 animation = FuncAnimation(fig, update, interval=interval, blit=True)
 plt.show()
