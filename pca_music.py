@@ -52,7 +52,7 @@ plt.xlim([-150000, 150000])
 plt.ylim([-150000, 150000])
 #plt.xlim([np.amin(transformed_windows[:, 0]), np.amax(transformed_windows[:, 0])])
 #plt.ylim([np.amin(transformed_windows[:, 1]), np.amax(transformed_windows[:, 1])])
-scat = plt.scatter([0], [0])
+scat = plt.scatter([0], [0], s=10)
 
 p = pyaudio.PyAudio()
 cur = 0
@@ -71,6 +71,8 @@ fps = 20
 interval = 1000 / fps
 last = None
 def update(frame_n):
+    global rate
+    global cur
     global last
     global pyaudio_t
     global stream
@@ -80,6 +82,8 @@ def update(frame_n):
         stream.stop_stream()
     else:
         stream.start_stream()
+    if delta < -0.1:
+        cur += 0.1 * rate
     print("animation: %.2f" % (pyaudio_t - this_t))
     t = int(frame_n / fps * rate)
     if last is None:
