@@ -62,8 +62,7 @@ except FileNotFoundError:
         pickle.dump(pca, f)
 
 fig = plt.figure(figsize=(4, 4))
-plt.xlim([-150000, 150000])
-plt.ylim([-150000, 150000])
+lims = [0, 0]
 
 scat = plt.scatter([0], [0], s=args.point_size, c='w')
 # set black background
@@ -84,6 +83,18 @@ while True:
         break
     w = windows[t1:t2:args.sparsity]
     transformed_windows = pca.transform(w)
+
+    # make sure the axis limits are always enough to show all the points
+    dlims = (np.min(transformed_windows), np.max(transformed_windows))
+    if dlims[0] < lims[0]:
+        lims[0] = dlims[0]
+        plt.xlim(xmin=lims[0])
+        plt.ylim(ymin=lims[0])
+    if dlims[1] > lims[1]:
+        lims[1] = dlims[1]
+        plt.xlim(xmax=lims[1])
+        plt.ylim(ymax=lims[1])
+
     scat.set_offsets(transformed_windows)
     writer.grab_frame()
     frame_n += 1
