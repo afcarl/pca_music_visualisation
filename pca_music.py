@@ -1,18 +1,36 @@
+#!/usr/bin/env python
+
+"""
+- Split sound into e.g. 128-sample windows
+- Treat each window as one sample in 128-dimensional space
+- Do PCAs to 2 dimensions on all the samples
+- On each frame, draw the PCs of e.g. every 16th sample since the last frame
+"""
+
 from __future__ import print_function, division
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument("wav_file")
+parser.add_argument("--fps", type=int, default=60)
+parser.add_argument("--sparsity", type=int, default=16)
+parser.add_argument("--point_size", type=int, default=5)
+args = parser.parse_args()
+
 import numpy as np
 from scipy.io import wavfile
-import matplotlib
-matplotlib.use('Qt4Agg')
 import matplotlib.pyplot as plt
-import struct
+import matplotlib.animation as manimation
 from sklearn.decomposition import PCA, IncrementalPCA
-from matplotlib.animation import FuncAnimation
-import pyaudio
-import math
-import time
 import pickle
+import os.path
+import math
 
-(rate, data) = wavfile.read('closer.wav')
+pca_filename = args.wav_file + ".pca.pickle"
+output_filename = args.wav_file.replace('.wav', '') + '.mp4'
+
+print("Loading sound file...")
+(rate, data) = wavfile.read(args.wav_file)
 samples = data[:, 0]
 
 samples = np.array(samples)
@@ -23,89 +41,56 @@ windows = np.lib.stride_tricks.as_strided(
     samples,
     shape=(len(samples) - window_len_samples + 1, window_len_samples),
     strides=(samples.itemsize, samples.itemsize))
-"""
-if True:
+
+try:
+    with open(pca_filename, 'rb') as f:
+        print("Loading PCA...")
+        pca = pickle.load(f)
+except FileNotFoundError:
+    print("Generating PCA...")
     pca = IncrementalPCA(n_components=2)
-    batch_size = 10000
+    batch_size = 8192
     n_batches = math.floor(len(windows) / batch_size)
     for i in range(n_batches):
         start = i * batch_size
         end = (i + 1) * batch_size
         pca.partial_fit(windows[start:end])
         percent_complete = i  / n_batches * 100
-        print("%.1f" % percent_complete)
-else:
-    pca = PCA(n_components=2)
-    pca.fit(windows)
-with open('pca', 'wb') as f:
-    pickle.dump(pca, f)
-"""
+        print("%.1f%% complete" % percent_complete)
+    print("Done!")
+    with open(pca_filename, 'wb') as f:
+        pickle.dump(pca, f)
 
-with open('pca', 'rb') as f:
-    pca = pickle.load(f)
-
-fig = plt.figure()
+fig = plt.figure(figsize=(4, 4))
 plt.xlim([-150000, 150000])
 plt.ylim([-150000, 150000])
-#plt.xlim([np.amin(transformed_windows[:, 0]), np.amax(transformed_windows[:, 0])])
-#plt.ylim([np.amin(transformed_windows[:, 1]), np.amax(transformed_windows[:, 1])])
-scat = plt.scatter([0], [0], s=10)
 
-p = pyaudio.PyAudio()
-cur = 0
-pyaudio_t = 0
+scat = plt.scatter([0], [0], s=args.point_size, c='w')
+# set black background
+fig.axes[0].set_facecolor('black')
+# remove borders
+plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
 
+FFMpegWriter = manimation.writers['ffmpeg']
+writer = FFMpegWriter(fps=args.fps)
 
-def callback(in_data, frame_count, time_info, status):
-    global cur
-    global pyaudio_t
-    d = samples[cur:cur + frame_count]
-    samples_packed = \
-        struct.pack('%dh' % len(d), *d)
-    cur += frame_count
-    pyaudio_t = cur / rate
-    return (samples_packed, pyaudio.paContinue)
-
-
-fps = 20
-interval = 1000 / fps
-last = None
-
-
-def update(frame_n):
-    global rate
-    global cur
-    global last
-    global pyaudio_t
-    global stream
-    this_t = frame_n / fps
-    delta = pyaudio_t - this_t
-    if delta > 0.1:
-        stream.stop_stream()
-    else:
-        stream.start_stream()
-    if delta < -0.1:
-        cur += 0.1 * rate
-    print("animation: %.2f" % (pyaudio_t - this_t))
-    t = int(frame_n / fps * rate)
-    if last is None:
-        last = t
-        return []
-    sparsity = 16
-    prop = 0.0
-    last2 = math.floor(last + (t - last) * prop)
-    w = windows[last2:t:sparsity]
+writer.setup(fig, output_filename, dpi=100)
+frame_n = 1
+while True:
+    print("Frame %d" % frame_n)
+    t1 = int(((frame_n - 1) / args.fps) * rate)
+    t2 = int((frame_n / args.fps) * rate)
+    if t2 > len(windows):
+        break
+    w = windows[t1:t2:args.sparsity]
     transformed_windows = pca.transform(w)
-    last = t
     scat.set_offsets(transformed_windows)
-    return []
+    writer.grab_frame()
+    frame_n += 1
+writer.finish()
 
-
-stream = p.open(
-    rate=rate,
-    channels=1,
-    format=p.get_format_from_width(2),
-    output=True,
-    stream_callback=callback)
-animation = FuncAnimation(fig, update, interval=interval, blit=True)
-plt.show()
+print("Now run:")
+print("ffmpeg -i %s -i %s -c copy -y %s" %
+        (output_filename,
+         args.wav_file,
+         output_filename.replace('.mp4', '.mkv')))
