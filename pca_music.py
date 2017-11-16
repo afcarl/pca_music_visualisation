@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 """
 Make a music visualiser out of PCA applied to windows of samples.
