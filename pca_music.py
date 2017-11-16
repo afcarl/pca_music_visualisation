@@ -1,10 +1,12 @@
 #!/usr/bin/env python
 
 """
+Make a music visualiser out of PCA applied to windows of samples.
 - Split sound into e.g. 128-sample windows
 - Treat each window as one sample in 128-dimensional space
 - Do PCAs to 2 dimensions on all the samples
-- On each frame, draw the PCs of e.g. every 16th sample since the last frame
+- Render a video, on each frame drawing all the samples since the last frame
+  (or rather, with sparsity=16, every 16th sample since the last frame)
 """
 
 from __future__ import print_function, division
@@ -15,6 +17,7 @@ parser.add_argument("wav_file")
 parser.add_argument("--fps", type=int, default=60)
 parser.add_argument("--sparsity", type=int, default=16)
 parser.add_argument("--point_size", type=int, default=5)
+parser.add_argument("--window-len", type=int, default=128)
 args = parser.parse_args()
 
 import numpy as np
@@ -26,6 +29,8 @@ import pickle
 import os.path
 import math
 
+# Load data
+
 pca_filename = args.wav_file + ".pca.pickle"
 output_filename = args.wav_file.replace('.wav', '') + '.mp4'
 
@@ -33,14 +38,21 @@ print("Loading sound file...")
 (rate, data) = wavfile.read(args.wav_file)
 samples = data[:, 0]
 
+# Generate windows
+
 samples = np.array(samples)
-window_len_samples = 128
-# stride argument: stride for each dimension of the resulting array
-# this is set up for stride=1 right now
+# Get a view of array which looks like a bunch of strides taken
+# across the original - so we can get windowed data without actually
+# having to allocate memory for all the windows.
+# (stride argument: stride for each dimension of the resulting array.
+# This is set up for stride=1 right now.)
 windows = np.lib.stride_tricks.as_strided(
     samples,
-    shape=(len(samples) - window_len_samples + 1, window_len_samples),
+    shape=(len(samples) - args.window_len + 1, args.window_len),
     strides=(samples.itemsize, samples.itemsize))
+
+# Do PCA
+# (Or load precomputed PCs if available)
 
 try:
     with open(pca_filename, 'rb') as f:
@@ -61,6 +73,8 @@ except FileNotFoundError:
     with open(pca_filename, 'wb') as f:
         pickle.dump(pca, f)
 
+# Draw the initial frame
+
 fig = plt.figure(figsize=(4, 4))
 lims = [0, 0]
 
@@ -70,9 +84,10 @@ fig.axes[0].set_facecolor('black')
 # remove borders
 plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
 
+# Render the video
+
 FFMpegWriter = manimation.writers['ffmpeg']
 writer = FFMpegWriter(fps=args.fps)
-
 writer.setup(fig, output_filename, dpi=100)
 frame_n = 1
 while True:
@@ -100,7 +115,8 @@ while True:
     frame_n += 1
 writer.finish()
 
-print("Now run:")
+print("Wrote video to %s" % output_filename)
+print("To combine audio and video, run something like:")
 print("ffmpeg -i %s -i %s -c copy -y %s" %
         (output_filename,
          args.wav_file,
